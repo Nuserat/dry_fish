@@ -50,9 +50,19 @@ transform = transforms.Compose([
 
 # Class labels
 class_names = [
-    "Corica soborna(কাচকি মাছ)", "Jamuna ailia(কাজরী মাছ)", "Clupeidae(চাপিলা মাছ)", "Shrimp(চিংড়ি মাছ)", "Chepa(চ্যাপা মাছ)",
-    "Chela(চ্যালা মাছ)", "Swamp barb(পুঁটি মাছ)", "Silond catfish(ফ্যাসা মাছ)", "Pale Carplet(মলা মাছ)", "Bombay Duck(লইট্যা মাছ)", "Four-finger threadfin(লাইক্ষা মাছ)"
+    "Corica soborna(কাচকি মাছ)", 
+    "Jamuna ailia(কাজরী মাছ)", 
+    "Clupeidae(চাপিলা মাছ)", 
+    "Shrimp(চিংড়ি মাছ)", 
+    "Chepa(চ্যাপা মাছ)",
+    "Chela(চ্যালা মাছ)", 
+    "Swamp barb(পুঁটি মাছ)", 
+    "Silond catfish(ফ্যাসা মাছ)", 
+    "Pale Carplet(মলা মাছ)", 
+    "Bombay Duck(লইট্যা মাছ)", 
+    "Four-finger threadfin(লাইক্ষা মাছ)"
 ]
+
 
 # Header Section
 st.markdown(
@@ -80,37 +90,47 @@ if uploaded_file:
     transformed_image = transform(image).unsqueeze(0).to("cuda" if torch.cuda.is_available() else "cpu")
 
     model = load_model()
-    
+    original_image_np = transformed_image.squeeze(0).permute(1, 2, 0).cpu().numpy()
+    original_image_np = (original_image_np * 0.5) + 0.5  # Unnormalize
+    original_image_np = np.clip(original_image_np, 0, 1)
+
+    target_layers = [model.features[-1]]
+
+    # Initialize CAM methods
+    gradcam = GradCAM(model=model, target_layers=target_layers)
+    gradcam_plus_plus = GradCAMPlusPlus(model=model, target_layers=target_layers)
+    eigen_cam = EigenCAM(model=model, target_layers=target_layers)
+
     with torch.no_grad():
         outputs = model(transformed_image)
-        predicted_class = outputs.argmax().item()
-    
+        predicted_class = outputs.argmax().item()  # The predicted class index
+        predicted_class_name = class_names[predicted_class]
+     
     st.sidebar.markdown(
         f"""
         <div style='border: 2px solid #4CAF50; border-radius: 10px; padding: 15px; text-align: center; background-color: lightgray; color: black;'>
             <h3 style='color: black;'>Prediction</h3>
-            <p style='font-size: 18px; font-weight: bold; color: #4CAF50;'>{class_names[predicted_class]}</p>
+            <p style='font-size: 18px; font-weight: bold; color: #4CAF50;'>{predicted_class_name}</p>
             <p style='font-size: 14px; color: black;'>(Class ID: {predicted_class})</p>
         </div>
         """,
         unsafe_allow_html=True,
     )
 
-    target_layers = [model.features[-1]]
+    
+
     target = [ClassifierOutputTarget(predicted_class)]
 
-    gradcam = GradCAM(model=model, target_layers=target_layers)
+    # Generate heatmaps using Grad-CAM, Grad-CAM++, and Eigen-CAM
     gradcam_heatmap = gradcam(input_tensor=transformed_image, targets=target)[0]
-    gradcam_result = show_cam_on_image(original_image_np, cv2.resize(gradcam_heatmap, (original_image_np.shape[1], original_image_np.shape[0])), use_rgb=True)
-
-    gradcam_plus_plus = GradCAMPlusPlus(model=model, target_layers=target_layers)
-    gradcam_plus_plus_heatmap = gradcam_plus_plus(input_tensor=transformed_image, targets=target)[0]
-    gradcam_plus_plus_result = show_cam_on_image(original_image_np, cv2.resize(gradcam_plus_plus_heatmap, (original_image_np.shape[1], original_image_np.shape[0])), use_rgb=True)
-
-    eigen_cam = EigenCAM(model=model, target_layers=target_layers)
+    gradcam_pp_heatmap = gradcam_plus_plus(input_tensor=transformed_image, targets=target)[0]
     eigen_cam_heatmap = eigen_cam(input_tensor=transformed_image, targets=target)[0]
-    eigen_cam_result = show_cam_on_image(original_image_np, cv2.resize(eigen_cam_heatmap, (original_image_np.shape[1], original_image_np.shape[0])), use_rgb=True)
 
+# Overlay the heatmaps on the original image
+    gradcam_result = show_cam_on_image(original_image_np, gradcam_heatmap, use_rgb=True)
+    gradcam_pp_result = show_cam_on_image(original_image_np, gradcam_pp_heatmap, use_rgb=True)
+    eigen_cam_result = show_cam_on_image(original_image_np, eigen_cam_heatmap, use_rgb=True)
+    
     st.markdown(
         """
         <div style='text-align: center; font-size: 20px; font-weight: bold; margin-top: 30px;'>
@@ -121,7 +141,7 @@ if uploaded_file:
     )
 
     cols = st.columns(4, gap="medium")
-    grid_images = [np.array(image), gradcam_result, gradcam_plus_plus_result, eigen_cam_result]
+    grid_images = [np.array(image), gradcam_result, gradcam_pp_result, eigen_cam_result]
     #captions = ["**Original Image**", "**Grad-CAM**", "**Grad-CAM++**", "**Eigen-CAM**"]
     captions = [
     "**Original Image**",
