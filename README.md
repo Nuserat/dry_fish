@@ -33,7 +33,7 @@ pip install -r requirements.txt
 
 ### Run the Application
 ```sh
-streamlit run app.py
+streamlit run dry_fish_app.py
 ```
 
 ## Model
